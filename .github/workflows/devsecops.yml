@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  devsecops:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || true # bo requirements może nie być kompletny
+          pip install -r requirements.txt || true
 
       - name: Dependency scan (SCA)
         run: |
@@ -34,26 +34,29 @@ jobs:
           pip install semgrep
           semgrep --config p/default . || true
 
-      - name: Run GitLeaks via Docker
+      - name: Secrets scan with GitLeaks (Docker)
         run: |
-            docker run --rm -v $(pwd):/path zricethezav/gitleaks:latest detect --source=/path --no-git -v
+          docker run --rm -v $(pwd):/path zricethezav/gitleaks:latest detect --source=/path --no-git -v
 
+      - name: Start application using Docker Compose
+        run: docker-compose up -d
 
-      - name: Build Docker image
-        run: docker build -t dvpwa:latest .
-
-      - name: DAST scan with OWASP ZAP
+      - name: Run OWASP ZAP scan
         run: |
-            mkdir zap-results
-            docker run --network="host" -v $(pwd)/zap-results:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t http://localhost:8080 \
+          mkdir zap-results
+          COMPOSE_NETWORK=$(docker network ls --format '{{.Name}}' | grep _default | head -n1)
+          docker run --rm \
+            --network $COMPOSE_NETWORK \
+            -v $(pwd)/zap-results:/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://sqli:8080 \
             -r zap-report.html
 
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: zap-report.html
+          path: zap-results/zap-report.html
 
       - name: Container image scan with Trivy
         uses: aquasecurity/trivy-action@master
@@ -61,3 +64,7 @@ jobs:
           image-ref: dvpwa:latest
           format: table
           severity: HIGH,CRITICAL
+
+      - name: Tear down docker-compose
+        if: always()
+        run: docker-compose down
