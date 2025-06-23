@@ -34,20 +34,20 @@ jobs:
           pip install semgrep
           semgrep --config p/default . || true
 
-      - name: Secrets scan with Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --no-git -v
+      - name: Run GitLeaks via Docker
+        run: |
+            docker run --rm -v $(pwd):/path zricethezav/gitleaks:latest detect --source=/path --no-git -v
+
 
       - name: Build Docker image
         run: docker build -t dvpwa:latest .
 
       - name: DAST scan with OWASP ZAP
         run: |
-          docker run -d -p 8080:8080 dvpwa:latest
-          docker run --network="host" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t http://localhost:8080 \
-            -r zap-report.html
+        mkdir zap-results
+        docker run --network="host" -v $(pwd)/zap-results:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+        -t http://localhost:8080 \
+        -r zap-report.html
 
       - name: Upload ZAP report
         uses: actions/upload-artifact@v4
