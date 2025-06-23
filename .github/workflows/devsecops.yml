@@ -37,6 +37,9 @@ jobs:
       - name: Secrets scan with GitLeaks (Docker)
         run: |
           docker run --rm -v $(pwd):/path zricethezav/gitleaks:latest detect --source=/path --no-git -v
+          
+      - name: Build application image
+        run: docker build -t dvpwa:latest .
 
       - name: Start application using Docker Compose
         run: docker compose up -d
